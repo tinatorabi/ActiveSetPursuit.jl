@@ -12,6 +12,7 @@ Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 QRupdate = "29d2ae51-7246-454b-9a65-19ff7b2849a5"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+UpdatableQRFactorizations = "8b110c62-ada2-4dd7-b53a-29f29fe8f7f4"
 
 [compat]
 DataFrames = "1.6"
@@ -21,6 +22,7 @@ Logging = "1.9"
 Printf = "1.9, 1.10"
 Random = "1.9, 1.10"
 SparseArrays = "1.9, 1.10"
+UpdatableQRFactorizations = "1.0.0"
 julia = "1.9, 1.10"
 
 [extras]

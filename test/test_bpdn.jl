@@ -6,9 +6,9 @@
 using Test, LinearAlgebra, Random, SparseArrays, ActiveSetPursuit, LinearOperators
 
 function test_pursuits()
-    m = 600
+    m = 6000
     n = 2560
-    k = 20
+    k = 50
     
     # Generate sparse solution
     p = randperm(n)[1:k]  # Position of nonzeros in x
