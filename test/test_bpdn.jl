@@ -6,7 +6,7 @@
 using Test, LinearAlgebra, Random, SparseArrays, ActiveSetPursuit, LinearOperators
 
 function test_pursuits()
-    m = 600
+    m = 6000
     n = 2560
     k = 20
     

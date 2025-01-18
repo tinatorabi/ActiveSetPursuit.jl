@@ -1,13 +1,14 @@
 struct OMPTracer{T}
     iteration::Vector{Int}
     lambda::Vector{T}
-    solution::Vector{SparseVector{T}} 
+    active::Vector{Vector{Int}}  # Store active indices instead of full sparse vectors
+    values::Vector{Vector{T}}    # Store corresponding values for active indices
 end
 
 Base.length(t::OMPTracer) = length(t.iteration)
 
 function Base.getindex(t::OMPTracer, i::Integer)
-    return t.solution[i], t.lambda[i]
+    return t.active[i], t.values[i], t.lambda[i]
 end
 
 Base.lastindex(t::OMPTracer) = lastindex(t.iteration)
@@ -67,7 +68,8 @@ function asp_omp(
     tracer = OMPTracer(
         Int[],                 
         Float64[],              
-        Vector{SparseVector{Float64}}() 
+        Vector{Vector{Int}}(),  # Store indices of active variables
+        Vector{Vector{Float64}}() # Store values of active variables
     )
 
     if loglevel > 0
@@ -199,17 +201,17 @@ function asp_omp(
         cur_r_size +=1 
         push!(tracer.iteration, itn)
         push!(tracer.lambda, zmax)
-        sparse_x_full = SparseVector(n, copy(active), copy(x))
-        push!(tracer.solution, copy(sparse_x_full))
+        push!(tracer.active, copy(active))
+        push!(tracer.values, copy(x))
         push!(active, p)
 
     end #while true
 
     push!(tracer.iteration, itn)
     push!(tracer.lambda, zmax)
-    sparse_x_full = SparseVector(n, copy(active), copy(x))
-    push!(tracer.solution, copy(sparse_x_full))
-
+    push!(tracer.active, copy(active))
+    push!(tracer.values, copy(x))
+    
     tottime = time() - time0
     if loglevel > 0
         @info @sprintf("\nEXIT BPdual -- %s\n", EXIT_INFO[eFlag])
