@@ -55,13 +55,14 @@ function asp_omp(
     
     m = length(b)
     n = length(z)
+    T = eltype(A)
 
-    work = rand(size(A,2))
-    work2 = rand(size(A,2))
-    work3 = rand(size(A,2))
-    work4 = rand(size(A,2))
-    work5 = rand(size(A,1))
-
+    work = Vector{T}(undef, size(A, 2))
+    work2 = Vector{T}(undef, size(A, 2))
+    work3 = Vector{T}(undef, size(A, 2))
+    work4 = Vector{T}(undef, size(A, 2))
+    work5 = Vector{T}(undef, size(A, 1))
+    
     nprodA = 0
     nprodAt = 1
 
