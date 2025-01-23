@@ -36,7 +36,7 @@ function asp_omp(
     A::Union{AbstractMatrix, AbstractLinearOperator},
     b::Vector,
     λin::Real;
-    active::Union{Nothing, Vector{Int}} = nothing,
+    active::Union{Nothing, Vector{Int}} = nothing,  
     state::Union{Nothing, Vector{Int}} = nothing,
     S::Matrix{Float64} = Matrix{Float64}(undef, size(A, 1), 0),
     R::Union{Nothing, Matrix{Float64}} = nothing,
@@ -47,124 +47,177 @@ function asp_omp(
     optTol::Real = 1e-05,
     gapTol::Real = 1e-06,
     pivTol::Real = 1e-12,
-    actMax::Union{Real, Nothing} = nothing,
-) 
+    actMax::Union{Real, Nothing} = nothing) 
+    
     time0 = time()
 
+    z = A' * b
+    
     m = length(b)
-    n = size(A, 2)
+    n = length(z)
     T = eltype(A)
 
-    # Pre-allocate work vectors
-    work = Vector{T}(undef, n)
-    work2 = Vector{T}(undef, n)
-    work3 = Vector{T}(undef, n)
-    work4 = Vector{T}(undef, n)
-    work5 = Vector{T}(undef, m)
-
+    work = Vector{T}(undef, size(A, 2))
+    work2 = Vector{T}(undef, size(A, 2))
+    work3 = Vector{T}(undef, size(A, 2))
+    work4 = Vector{T}(undef, size(A, 2))
+    work5 = Vector{T}(undef, size(A, 1))
+    
     nprodA = 0
-    nprodAt = 0
+    nprodAt = 1
 
-    # Pre-allocate tracer fields
     tracer = OMPTracer(
-        iteration=Vector{Int}(undef, itnMax),
-        lambda=Vector{T}(undef, itnMax),
-        active=Vector{Vector{Int}}(undef, itnMax),
-        values=Vector{Vector{T}}(undef, itnMax),
+        Int[],                 
+        Float64[],              
+        Vector{Vector{Int}}(),  # Store indices of active variables
+        Vector{Vector{Float64}}() # Store values of active variables
     )
 
-    # Pre-allocate residuals and solution variables
-    r = copy(b)
-    x = zeros(T, n)
-    z = A' * b
-    nprodAt += 1
+    if loglevel > 0
+        @info "-"^124
+        @info @sprintf("%-30s : %-10d    %-30s : %-10.4e", "No. rows", m, "λ", λin)
+        @info @sprintf("%-30s : %-10d    %-30s : %-10.1e", "No. columns", n, "Optimality tol", optTol)
+        @info @sprintf("%-30s : %-10d    %-30s : %-10.1e", "Maximum iterations", itnMax, "Duality tol", gapTol)
+        @info "-"^124
+    end
 
-    # Exit condition flags
+
+    # Initialize local variables.
+    EXIT_INFO = Dict(
+        :EXIT_OPTIMAL => "Optimal solution found -- full Newton step",
+        :EXIT_TOO_MANY_ITNS =>  "Too many iterations",
+        :EXIT_SINGULAR_LS => "Singular least-squares subproblem",
+        :EXIT_LAMBDA => "Reached minimum value of lambda",
+        :EXIT_RHS_ZERO => "b = 0. The solution is x = 0",
+        :EXIT_UNCONSTRAINED => "Unconstrained solution r = b is optimal",
+        :EXIT_ACTMAX => "Max no. of active constraints reached",
+        :EXIT_UNKNOWN => "unknown exit"
+    )
+
+    itn = 0
     eFlag = :EXIT_UNKNOWN
+    x = zeros(Float64, 0)
+    zerovec = zeros(Float64, n)
+    p = 0
+    cur_r_size = 0
 
-    # Initialize active set
-    if active === nothing
-        active = Vector{Int}(undef, itnMax)
-        active .= 0  # Ensure initialized
+    if norm(b, Inf) == 0
+        r = zeros(m)
+        eFlag = :EXIT_RHS_ZERO
+    end
+
+    # Solution is unconstrained for lambda large.
+    zmax = norm(z, Inf)
+    if eFlag == :EXIT_UNKNOWN && zmax < λin
+        r = b
+        eFlag = :EXIT_UNCONSTRAINED
+    end
+
+    if eFlag != :EXIT_UNKNOWN || active === nothing
+        active = Vector{Int}([])
     end
     if state === nothing
         state = zeros(Int, n)
     end
     if R === nothing
-        R = Matrix{Float64}(undef, n, n)
-        S = Matrix{Float64}(undef, m, n)
+        R = Matrix{Float64}(undef, size(A,2), size(A,2))
+        S = Matrix{Float64}(undef, size(A,1), size(A,2))
     end
+
     if actMax === nothing
-        actMax = n
+        actMax = size(A, 2)
     end
 
-    # Logging information
-    if loglevel > 0
-        @info "-"^124
-        @info @sprintf("%-30s : %-10d    %-30s : %-10.4e", "No. rows", m, "λ", λin)
-        @info @sprintf("%-30s : %-10d    %-30s : %-10.1e", "No. columns", n, "Optimality tol", optTol)
-        @info "-"^124
+    if loglevel>0
+        @info @sprintf("%4s  %8s %12s %12s %12s", "Itn", "Var", "λ", "rNorm", "xNorm")
     end
 
-    cur_r_size = 0
-    zmax, p = findmax(abs.(z))
+    # Main loop.
+    while true
+        # Compute dual obj gradient g, search direction dy, and residual r.
+        if itn == 0
+            x = Float64[]
+            r = b
+            z = A' * r
+            nprodAt += 1
+            zmax = norm(z, Inf)
+        else
+            x,y = csne(@view R[1:cur_r_size, 1:cur_r_size], @view S[:,1:cur_r_size], vec(b))
+            if norm(x, Inf) > 1e12
+                eFlag = :EXIT_SINGULAR_LS
+                break
+            end
+            r = b - @view S[:,1:cur_r_size] * x
+        end
 
-    while eFlag == :EXIT_UNKNOWN
-        # Check for convergence or stopping criteria
-        if zmax <= λin
+        rNorm = norm(r, 2)
+        xNorm = norm(x, 1)
+
+        if loglevel>0
+            @info @sprintf("%4i  %8i %12.5e %12.5e %12.5e", itn, p, zmax, rNorm, xNorm)
+        end
+
+        # Check exit conditions.
+        if eFlag != :EXIT_UNKNOWN
+            # Already set. Don't test the other exits.
+        elseif zmax <= λin
             eFlag = :EXIT_LAMBDA
-            break
-        elseif norm(r) <= optTol
+        elseif rNorm <= optTol
             eFlag = :EXIT_OPTIMAL
-            break
-        elseif cur_r_size >= itnMax
+        elseif itn >= itnMax
             eFlag = :EXIT_TOO_MANY_ITNS
+        elseif itn == actMax
+            eFlag = :EXIT_ACTMAX
+        end
+
+        if eFlag != :EXIT_UNKNOWN
             break
         end
 
-        # Update active set and QR factorization
-        zerovec = zeros(T, n)
-        zerovec[p] = 1.0
-        a = A * zerovec
-        nprodA += 1
+        # New iteration starts here.
+        itn += 1
 
-        qraddcol!(S, R, a, cur_r_size, work, work2, work3, work4, work5)
-        cur_r_size += 1
-        active[cur_r_size] = p
+        # Find step to the nearest inactive constraint
+        z = A' * r
 
-        # Solve the reduced system using the QR factorization
-        x[1:cur_r_size], y = csne(
-            @view R[1:cur_r_size, 1:cur_r_size],
-            @view S[:, 1:cur_r_size],
-            vec(b))
-        r .= b .- @view S[:, 1:cur_r_size] * x[1:cur_r_size]
-
-        # Update dual variables
-        z .= A' * r
         nprodAt += 1
         zmax, p = findmax(abs.(z))
 
-        # Store iteration in the tracer
-        tracer.iteration[cur_r_size] = cur_r_size
-        tracer.lambda[cur_r_size] = zmax
-        tracer.active[cur_r_size] = copy(active[1:cur_r_size])
-        tracer.values[cur_r_size] = copy(x[1:cur_r_size])
-
-        if loglevel > 0
-            @info @sprintf("%4i  %8i %12.5e %12.5e %12.5e", cur_r_size, p, zmax, norm(r), norm(x))
+        if z[p] < 0
+            state[p] = -1
+        else
+            state[p] = 1
         end
-    end
 
-    # Finalize tracer
-    tracer.iteration .= tracer.iteration[1:cur_r_size]
-    tracer.lambda .= tracer.lambda[1:cur_r_size]
-    tracer.active .= tracer.active[1:cur_r_size]
-    tracer.values .= tracer.values[1:cur_r_size]
+        zerovec[p] = 1   # Extract a = A[:, p]
+        a = A * zerovec
 
+        nprodA += 1
+        zerovec[p] = 0
+
+        qraddcol!(S, R, a, cur_r_size, work, work2, work3, work4, work5)  # Update R
+        # S = hcat(S, a)  # Expand S, active
+        cur_r_size +=1 
+        push!(tracer.iteration, itn)
+        push!(tracer.lambda, zmax)
+        push!(tracer.active, copy(active))
+        push!(tracer.values, copy(x))
+        push!(active, p)
+
+    end #while true
+
+    push!(tracer.iteration, itn)
+    push!(tracer.lambda, zmax)
+    push!(tracer.active, copy(active))
+    push!(tracer.values, copy(x))
+    
+    tottime = time() - time0
     if loglevel > 0
-        @info "-"^124
-        @info @sprintf("Exit reason: %s", EXIT_INFO[eFlag])
+        @info @sprintf("\nEXIT BPdual -- %s\n", EXIT_INFO[eFlag])
+        @info @sprintf("%-20s: %8i", "Products with A", nprodA)
+        @info @sprintf("%-20s: %8i", "Products with At", nprodAt)
+        @info @sprintf("%-20s: %8.1e", "Solution time (sec)", tottime)
+        @info "\n"
     end
-
     return tracer
 end
