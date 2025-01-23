@@ -142,12 +142,14 @@ function asp_omp(
             nprodAt += 1
             zmax = norm(z, Inf)
         else
-            x,y = csne(@view R[1:cur_r_size, 1:cur_r_size], @view S[:,1:cur_r_size], vec(b))
+            x,y = csne( (@view R[1:cur_r_size, 1:cur_r_size]), 
+                        (@view S[:,1:cur_r_size]), vec(b))
             if norm(x, Inf) > 1e12
                 eFlag = :EXIT_SINGULAR_LS
                 break
             end
-            r = b - @view S[:,1:cur_r_size] * x
+            Sx = (@view S[:,1:cur_r_size]) * x
+            r = b - Sx
         end
 
         rNorm = norm(r, 2)
