@@ -136,8 +136,7 @@ function asp_omp(
         x[1:cur_r_size], y = csne(
             @view R[1:cur_r_size, 1:cur_r_size],
             @view S[:, 1:cur_r_size],
-            vec(b),
-        )
+            vec(b))
         r .= b .- @view S[:, 1:cur_r_size] * x[1:cur_r_size]
 
         # Update dual variables
