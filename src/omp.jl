@@ -180,8 +180,8 @@ function asp_omp(
         itn += 1
 
         # Find step to the nearest inactive constraint
-        z = A' * r
-
+        # z = A' * r
+        mul!(z, A', r)
         nprodAt += 1
         zmax, p = findmax(abs.(z))
 
@@ -192,7 +192,7 @@ function asp_omp(
         end
 
         zerovec[p] = 1   # Extract a = A[:, p]
-        a = A * zerovec
+        a = A[:, p]
 
         nprodA += 1
         zerovec[p] = 0
