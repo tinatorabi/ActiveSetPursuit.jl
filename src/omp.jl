@@ -51,7 +51,8 @@ function asp_omp(
     
     time0 = time()
 
-    z = A' * b
+    A_T = A'
+    z = A_T * b
     
     m = length(b)
     n = length(z)
@@ -138,7 +139,7 @@ function asp_omp(
         if itn == 0
             x = Float64[]
             r = b
-            z = A' * r
+            z = A_T * r
             nprodAt += 1
             zmax = norm(z, Inf)
         else
@@ -180,8 +181,8 @@ function asp_omp(
         itn += 1
 
         # Find step to the nearest inactive constraint
-        # z = A' * r
-        mul!(z, A', r)
+        z = A_T * r
+        # mul!(z, A', r)
         nprodAt += 1
         zmax, p = findmax(abs.(z))
 
