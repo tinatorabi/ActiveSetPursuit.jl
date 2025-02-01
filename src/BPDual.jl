@@ -220,21 +220,21 @@ function bpdual(
         sL, sU = infeasibilities(bl, bu, z)
         g = b - λ*y  # Steepest-descent direction
 
-        if isempty(R[1:cur_r_size,1:cur_r_size])
+        if isempty((@view R[1:cur_r_size,1:cur_r_size]))
             condS = 1
         else
-            rmin = minimum(diag(R[1:cur_r_size, 1:cur_r_size]))
-            rmax = maximum(diag(R[1:cur_r_size, 1:cur_r_size]))
+            rmin = minimum(diag((@view R[1:cur_r_size, 1:cur_r_size])))
+            rmax = maximum(diag((@view R[1:cur_r_size, 1:cur_r_size])))
             condS = rmax / rmin
         end
 
         if condS > 1e+10
             eFlag = :EXIT_SINGULAR_LS
             # Pad x with enough zeros to make it compatible with S.
-            npad = size(S[:, 1:cur_r_size], 2) - size(x, 1)
+            npad = size((@view S[:, 1:cur_r_size]), 2) - size(x, 1)
             x = [x; zeros(npad)]
         else
-            dx, dy = newtonstep(S[:,1:cur_r_size], R[1:cur_r_size, 1:cur_r_size], g, x, λ)
+            dx, dy = newtonstep((@view S[:,1:cur_r_size]), (@view R[1:cur_r_size, 1:cur_r_size]), g, x, λ)
             x .+= dx
         end
 
@@ -282,7 +282,7 @@ function bpdual(
                 @info "\nOptimal solution found. Trimming multipliers..."
             end
             g = b - λin*y
-            trimx(x, S[:, 1:cur_r_size], R[1:cur_r_size, 1:cur_r_size], active, state, g, b, λ, feaTol, optTol, loglevel)
+            trimx(x, (@view S[:, 1:cur_r_size]), (@view R[1:cur_r_size, 1:cur_r_size]), active, state, g, b, λ, feaTol, optTol, loglevel)
             numtrim = nact - length(active)
             nact = length(active)
         end
@@ -297,7 +297,7 @@ function bpdual(
         p = q = 0
 
         if homotopy
-            x, dy, dz, step, λ, p = htpynewlam(active, state, A, R[1:cur_r_size, 1:cur_r_size], S[:,1:cur_r_size], x, y, sL, sU, λ, lamFinal)
+            x, dy, dz, step, λ, p = htpynewlam(active, state, A, (@view R[1:cur_r_size, 1:cur_r_size]), (@view S[:,1:cur_r_size]), x, y, sL, sU, λ, lamFinal)
             nprodAt += 1
         else
             if norm(dy, Inf) < eps()        
