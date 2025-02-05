@@ -37,7 +37,6 @@ function asp_omp(
     b::Vector,
     λin::Real;
     active::Union{Nothing, Vector{Int}} = nothing,  
-    state::Union{Nothing, Vector{Int}} = nothing,
     S::Matrix{Float64} = Matrix{Float64}(undef, size(A, 1), 0),
     R::Union{Nothing, Matrix{Float64}} = nothing,
     loglevel::Int = 1,
@@ -114,12 +113,24 @@ function asp_omp(
         eFlag = :EXIT_UNCONSTRAINED
     end
 
-    if eFlag != :EXIT_UNKNOWN || active === nothing
+    if active === nothing
         active = Vector{Int}([])
+    else
+        active = active
+        R = Matrix{Float64}(undef, size(A, 2), size(A, 2))
+        S = Matrix{Float64}(undef, size(A, 1), size(A, 2))
+        cur_r_size = length(active)
+        S[:, 1:cur_r_size] .= A[:, active]  
+        _, R_ = qr(A[:, active])            
+        # Use regular indexing for R
+        println(size(R_))
+        R[1:cur_r_size, 1:cur_r_size] .= R_            # Copy values into R
+        itn = 1
+        
     end
-    if state === nothing
-        state = zeros(Int, n)
-    end
+    # if state === nothing
+    #     state = zeros(Int, n)
+    # end
     if R === nothing
         R = Matrix{Float64}(undef, size(A,2), size(A,2))
         S = Matrix{Float64}(undef, size(A,1), size(A,2))
@@ -186,11 +197,11 @@ function asp_omp(
         nprodAt += 1
         zmax, p = findmax(abs.(z))
 
-        if z[p] < 0
-            state[p] = -1
-        else
-            state[p] = 1
-        end
+        # if z[p] < 0
+        #     state[p] = -1
+        # else
+        #     state[p] = 1
+        # end
 
         zerovec[p] = 1   # Extract a = A[:, p]
         a = A[:, p]
