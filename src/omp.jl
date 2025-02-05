@@ -52,7 +52,7 @@ function asp_omp(
 
     A_T = A'
     z = A_T * b
-    
+    int_ac =0 
     m = length(b)
     n = length(z)
     T = eltype(A)
@@ -119,6 +119,7 @@ function asp_omp(
         active = active
         R = Matrix{Float64}(undef, size(A, 2), size(A, 2))
         S = Matrix{Float64}(undef, size(A, 1), size(A, 2))
+        int_ac= length(active)
         cur_r_size = length(active)
         S[:, 1:cur_r_size] .= A[:, active]  
         _, R_ = qr(A[:, active])            
@@ -180,7 +181,7 @@ function asp_omp(
             eFlag = :EXIT_OPTIMAL
         elseif itn >= itnMax
             eFlag = :EXIT_TOO_MANY_ITNS
-        elseif itn == actMax
+        elseif itn-1 == actMax- int_ac
             eFlag = :EXIT_ACTMAX
         end
 
